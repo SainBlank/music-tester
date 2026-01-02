@@ -1,4 +1,4 @@
-name: Music
+name: MUSIC
 
 on:
   workflow_dispatch:
@@ -9,7 +9,7 @@ jobs:
     timeout-minutes: 3600
 
     steps:
-      - name: Configure Core RDP Settings
+      - name: Configure Core MUSIC Settings
         run: |
           # Enable Remote Desktop and disable Network Level Authentication (if needed)
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' `
@@ -29,7 +29,7 @@ jobs:
           # (Optional) Restart the Remote Desktop service to ensure changes take effect
           Restart-Service -Name TermService -Force
 
-      - name: Create RDP User with Secure Password
+      - name: Create MUSIC User with Secure Password
         run: |
           Add-Type -AssemblyName System.Security
           $charSet = @{
@@ -86,7 +86,7 @@ jobs:
           }
           echo "TAILSCALE_IP=$tsIP" >> $env:GITHUB_ENV
       
-      - name: Verify RDP Accessibility
+      - name: Verify MUSIC Accessibility
         run: |
           Write-Host "Tailscale IP: $env:TAILSCALE_IP"
           
@@ -102,8 +102,8 @@ jobs:
         run: |
           Write-Host "`n=== RDP ACCESS ==="
           Write-Host "Address: $env:TAILSCALE_IP"
-          Write-Host "Username: ASD"
-          Write-Host "Password: B3j1j0n9@"
+          Write-Host "Username: RDP"
+          Write-Host "Password: $(echo $env:RDP_CREDS)"
           Write-Host "==================`n"
           
           # Keep runner active indefinitely (or until manually cancelled)
