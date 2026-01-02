@@ -102,8 +102,8 @@ jobs:
         run: |
           Write-Host "`n=== RDP ACCESS ==="
           Write-Host "Address: $env:TAILSCALE_IP"
-          Write-Host "Username: RDP"
-          Write-Host "Password: $(echo $env:RDP_CREDS)"
+          Write-Host "Username: Saiful"
+          Write-Host "Password: B3j1j0n9@"
           Write-Host "==================`n"
           
           # Keep runner active indefinitely (or until manually cancelled)
