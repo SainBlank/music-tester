@@ -138,17 +138,22 @@ mp3-to-midi/
 ├── run.py                entrypoint + diagnostik (--check)
 ├── requirements.txt
 ├── models/nmp.onnx       model Basic Pitch (kamu unduh sendiri)
+├── models/piano_hires.onnx  model piano opsional (kamu buat sendiri)
 ├── app/
 │   ├── config.py         konstanta model + default aplikasi
 │   ├── device.py         deteksi GPU / provider
+│   ├── engines.py        daftar engine + metadata untuk UI
+│   ├── session.py        pembuatan sesi ONNX (dipakai kedua engine)
 │   ├── audio.py          dekode ffmpeg + windowing
-│   ├── transcribe.py     sesi ONNX, batching, unwrap output
+│   ├── transcribe.py     engine Basic Pitch
+│   ├── piano.py          engine piano high-resolution
 │   ├── notes.py          posteriorgram -> note events
 │   ├── midi_writer.py    penulis SMF tanpa dependensi
 │   ├── jobs.py           job store + worker tunggal
 │   └── server.py         FastAPI + SSE progress
 ├── static/               UI (HTML/CSS/JS, tanpa build step)
 ├── tools/selftest.py     tes offline tanpa GPU
+├── tools/export_piano_onnx.py  konversi model piano ke ONNX (sekali saja)
 └── tmp/                  upload & hasil, auto-bersih 1 jam
 ```
 
@@ -218,8 +223,11 @@ $env:BP_OUTPUT_ORDER="note,onset,contour"
 
 | Variabel | Default | Fungsi |
 |---|---|---|
-| `BP_MODEL_PATH` | `models/nmp.onnx` | lokasi model |
+| `BP_MODEL_PATH` | `models/nmp.onnx` | lokasi model Basic Pitch |
+| `BP_PIANO_MODEL_PATH` | `models/piano_hires.onnx` | lokasi model piano |
 | `BP_BATCH_SIZE` | `32` | window per batch inference |
+| `BP_PIANO_BATCH_SIZE` | `4` | segmen 10 detik per batch (engine piano) |
+| `BP_PIANO_OUTPUT_ORDER` | – | override urutan output model piano |
 | `BP_FORCE_CPU` | – | `1` untuk memaksa CPU |
 | `BP_OUTPUT_ORDER` | – | override urutan output model |
 | `BP_MAX_UPLOAD_MB` | `100` | batas ukuran unggahan |
@@ -233,6 +241,67 @@ Algoritma pembentukan not di `app/notes.py` adalah port dari
 [Basic Pitch](https://github.com/spotify/basic-pitch) (Spotify, Apache-2.0).
 Bobot model `nmp.onnx` juga berasal dari project tersebut dan mengikuti
 lisensinya.
+
+## 14. Engine piano high-resolution (opsional)
+
+Basic Pitch dirancang ringan dan serba bisa, jadi ia generalis. Untuk stem
+**piano**, model khusus piano jauh lebih presisi karena memprediksi waktu onset
+dan offset sebagai **regresi**, bukan sekadar isi/tidaknya sebuah frame. Hasilnya
+waktu not tidak lagi terkunci ke grid frame, plus ada estimasi velocity yang
+sungguhan.
+
+### Perbedaan teknis
+
+| | Basic Pitch | Engine piano |
+|---|---|---|
+| sample rate | 22050 Hz | 16000 Hz |
+| frame rate | 86,13 fps | 100 fps |
+| jendela | ~2 detik | 10 detik |
+| output | note / onset / contour | reg_onset / reg_offset / frame / velocity |
+| cocok untuk | apa saja | **hanya piano** |
+
+### Cara memasang (butuh internet sekali)
+
+```bash
+pip install piano_transcription_inference torch
+python tools/export_piano_onnx.py
+python run.py --check
+```
+
+Skrip itu mengunduh checkpoint resmi (~160 MB), mengonversinya di komputermu,
+lalu menulis `models/piano_hires.onnx`. Setelah itu aplikasi kembali 100%
+offline. Kalau engine ini tidak dipasang, aplikasi tetap jalan normal dan
+dropdown hanya menampilkannya sebagai "belum terpasang".
+
+**Kenapa dikonversi sendiri, bukan mengunduh .onnx jadi?** Karena isi file
+`.onnx` milik orang lain tidak bisa kamu periksa — bobot model itu konten yang
+dieksekusi. Mengonversi sendiri dari sumber resmi menghilangkan pertanyaan itu.
+
+### Cara pakai
+
+Pilih **Engine transkripsi** di bagian atas halaman. Saat engine diganti, ketiga
+slider di Pengaturan lanjutan otomatis pindah ke default engine tersebut
+(ambang Basic Pitch tidak berlaku untuk model piano, dan sebaliknya).
+
+### Batasan yang jujur
+
+- **Hanya piano.** Stem gitar, vokal, string, atau drum akan menghasilkan not
+  yang kacau. Untuk itu tetap pakai Basic Pitch.
+- **Lebih berat.** Satu segmen = 10 detik audio, sekitar 46x lebih besar dari
+  jendela Basic Pitch, jadi batch dipatok 4. Di RTX 3060 12 GB ini masih aman.
+- **Post-processing di `app/piano.py` adalah reimplementasi**, bukan port
+  baris-per-baris. Perilakunya dikunci oleh tes sintetis di
+  `tools/selftest.py`, tapi perbedaan kecil dari implementasi referensi mungkin
+  ada — paling mungkin pada penentuan offset (akhir not). Waktu onset, yang
+  paling terdengar oleh telinga, mengikuti pendekatan referensi.
+- **Pedal sustain tidak dipakai.** Model aslinya punya head pedal; head itu
+  sengaja tidak diekspor karena aplikasi ini tidak menulis event pedal.
+
+### Atribusi
+
+Model dan pendekatan regresi onset/offset berasal dari Kong et al.,
+*High-resolution Piano Transcription with Pedals by Regressing Onset and Offset
+Times* — <https://github.com/bytedance/piano_transcription> (Apache-2.0).
 
 ---
 
